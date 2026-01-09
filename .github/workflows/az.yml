@@ -1,32 +1,32 @@
-name: AZ Test
+name: AZ Automation
 
 on:
+  schedule:
+    # 8:00 AM IST = 02:30 UTC
+    - cron: "30 2 * * *"
   workflow_dispatch:
 
 jobs:
-  az-job:
+  az:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
-      - name: Install system dependencies
+      - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run AZ Worker
+      - name: Run AZ worker
         env:
           GSHEET_ID: ${{ secrets.GSHEET_ID }}
           GSHEETS_CREDENTIALS: ${{ secrets.GSHEETS_CREDENTIALS }}
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ARCHIVE_ACCESS_KEY: ${{ secrets.ARCHIVE_ACCESS_KEY }}
           ARCHIVE_SECRET_KEY: ${{ secrets.ARCHIVE_SECRET_KEY }}
           PYTHONPATH: .
