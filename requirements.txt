@@ -1,6 +1,5 @@
 requests
 beautifulsoup4
 gspread
-oauth2client
+google-auth
 internetarchive
-python-telegram-bot==20.3
