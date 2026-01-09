@@ -6,39 +6,40 @@ from google.oauth2.service_account import Credentials
 GSHEET_ID = os.environ["GSHEET_ID"]
 GSHEETS_CREDENTIALS = os.environ["GSHEETS_CREDENTIALS"]
 
-# Google Sheets scope
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-def get_sheet(tab_name):
+def _get_sheet(tab_name):
     creds_dict = json.loads(GSHEETS_CREDENTIALS)
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     client = gspread.authorize(creds)
-    sheet = client.open_by_key(GSHEET_ID).worksheet(tab_name)
-    return sheet
+    return client.open_by_key(GSHEET_ID).worksheet(tab_name)
 
-def read_pending_rows(tab_name):
-    """
-    Returns list of dicts with row number and columns.
-    Only rows where Status is empty.
-    """
-    sheet = get_sheet(tab_name)
-    all_values = sheet.get_all_values()
-    headers = all_values[0]
+def read_all_rows(tab_name):
+    sheet = _get_sheet(tab_name)
+    values = sheet.get_all_values()
+    headers = values[0]
+
     rows = []
-    for idx, row in enumerate(all_values[1:], start=2):  # starts at row 2
-        row_dict = dict(zip(headers, row))
-        if not row_dict.get("Status"):
-            row_dict["row"] = idx
-            rows.append(row_dict)
+    for idx, row in enumerate(values[1:], start=2):
+        data = dict(zip(headers, row))
+        data["row"] = idx
+        rows.append(data)
+
     return rows
 
+def read_pending_rows(tab_name):
+    return [r for r in read_all_rows(tab_name) if not r.get("Status")]
+
 def batch_update(tab_name, updates):
-    """
-    updates: list of dicts with keys: row, Status, Assigned Number, Error Message
-    """
-    sheet = get_sheet(tab_name)
+    sheet = _get_sheet(tab_name)
+    cells = []
+
     for u in updates:
-        row_num = u["row"]
-        sheet.update(f'D{row_num}', [[u["Status"]]])
-        sheet.update(f'E{row_num}', [[u["Assigned Number"]]])
-        sheet.update(f'F{row_num}', [[u["Error Message"]]])
+        r = u["row"]
+        cells.extend([
+            gspread.Cell(r, 4, u["Status"]),           # Status
+            gspread.Cell(r, 5, u["Assigned Number"]),  # Assigned Number
+            gspread.Cell(r, 6, u["Error Message"]),    # Error Message
+        ])
+
+    sheet.update_cells(cells)
