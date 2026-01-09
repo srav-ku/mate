@@ -10,12 +10,9 @@ from common.telegram import send_message
 
 TAB_NAME = "AZ"
 
-def az_download_logic(title, link, start_number, identifier):
+def az_download_logic(title, link, assigned_number, identifier):
     """
-    Your existing AZ logic modified to:
-    - Download videos to temp folder
-    - Merge
-    - Upload to Archive.org
+    Download all videos from an AZ album link, merge, upload to Archive.org
     Returns: (success: bool, message: str)
     """
     temp_dir = f"/tmp/{title.replace(' ', '_')}"
@@ -28,11 +25,9 @@ def az_download_logic(title, link, start_number, identifier):
         # Step 1: extract video pages
         resp = requests.get(link, headers=headers)
         soup = BeautifulSoup(resp.text, "html.parser")
-        video_pages = []
-        for a_tag in soup.find_all("a", href=True):
-            href = a_tag["href"]
-            if href.startswith("/azncdn/"):
-                video_pages.append(urljoin(base_url, href))
+        video_pages = [urljoin(base_url, a["href"]) for a in soup.find_all("a", href=True)
+                       if a["href"].startswith("/azncdn/")]
+
         if not video_pages:
             return False, "No video pages found"
 
@@ -45,6 +40,7 @@ def az_download_logic(title, link, start_number, identifier):
                 btn = a.find("button", class_="single-video-download-btn")
                 if btn:
                     mp4_links.append(a["href"])
+
         if not mp4_links:
             return False, "No mp4 links found"
 
@@ -64,10 +60,11 @@ def az_download_logic(title, link, start_number, identifier):
         with open(file_list, "w") as f:
             for vf in video_files:
                 f.write(f"file '{vf}'\n")
-        output_file = os.path.join(temp_dir, f"{start_number:02d} - {title}.mp4")
+
+        output_file = os.path.join(temp_dir, f"{assigned_number:02d} - {title}.mp4")
         subprocess.run(["ffmpeg", "-f", "concat", "-safe", "0", "-i", file_list, "-c", "copy", output_file], check=True)
 
-        # Step 5: upload
+        # Step 5: upload to Archive.org
         success, msg = upload_file(output_file, identifier)
         if not success:
             return False, msg
@@ -78,28 +75,41 @@ def az_download_logic(title, link, start_number, identifier):
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+
 def main():
     rows = read_pending_rows(TAB_NAME)
     updates = []
+
+    # Determine next number for sequencing
+    existing_numbers = [int(r.get("Assigned Number") or 0) for r in rows if r.get("Assigned Number")]
+    next_number = max(existing_numbers, default=0) + 1
 
     for r in rows:
         title = r["Title"]
         link = r["Link"]
         identifier = r["Identifier"]
-        start_number = r.get("Assigned Number") or 1
 
-        success, msg = az_download_logic(title, link, start_number, identifier)
+        # Only assign a number when the row is successfully processed
+        assigned_number = next_number
 
-        updates.append({
+        success, msg = az_download_logic(title, link, assigned_number, identifier)
+
+        update_row = {
             "row": r["row"],
             "Status": "DONE" if success else "FAILED",
-            "Error Message": msg,
-            "Assigned Number": start_number
-        })
+            "Error Message": msg
+        }
+
+        if success:
+            update_row["Assigned Number"] = assigned_number
+            next_number += 1  # increment only on success
+
+        updates.append(update_row)
 
         send_message(f"{title}: {'DONE' if success else 'FAILED'} {msg}")
 
     batch_update(TAB_NAME, updates)
+
 
 if __name__ == "__main__":
     main()
