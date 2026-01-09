@@ -1,5 +1,5 @@
-from internetarchive import upload
 import os
+from internetarchive import upload
 
 ARCHIVE_ACCESS_KEY = os.environ["ARCHIVE_ACCESS_KEY"]
 ARCHIVE_SECRET_KEY = os.environ["ARCHIVE_SECRET_KEY"]
