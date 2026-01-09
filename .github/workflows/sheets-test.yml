@@ -1,0 +1,22 @@
+name: Sheets Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install gspread google-auth
+
+      - name: Test Google Sheets access
+        env:
+          GSHEETS_CREDENTIALS: ${{ secrets.GSHEETS_CREDENTIALS }}
+          GSHEET_ID: ${{ secrets.GSHEET_ID }}
+        run: python test_sheets.py
