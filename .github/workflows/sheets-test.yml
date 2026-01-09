@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  az-test:
+  az-job:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -15,10 +15,13 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
         run: pip install -r requirements.txt
 
-      - name: Run AZ Worker (Test)
+      - name: Run AZ Worker
         env:
           GSHEET_ID: ${{ secrets.GSHEET_ID }}
           GSHEETS_CREDENTIALS: ${{ secrets.GSHEETS_CREDENTIALS }}
