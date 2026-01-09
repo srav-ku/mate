@@ -1,22 +1,29 @@
-name: Sheets Test
+name: AZ Test
 
 on:
   workflow_dispatch:
 
 jobs:
-  test:
+  az-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - run: pip install gspread google-auth
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-      - name: Test Google Sheets access
+      - name: Run AZ Worker (Test)
         env:
-          GSHEETS_CREDENTIALS: ${{ secrets.GSHEETS_CREDENTIALS }}
           GSHEET_ID: ${{ secrets.GSHEET_ID }}
-        run: python test_sheets.py
+          GSHEETS_CREDENTIALS: ${{ secrets.GSHEETS_CREDENTIALS }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ARCHIVE_ACCESS_KEY: ${{ secrets.ARCHIVE_ACCESS_KEY }}
+          ARCHIVE_SECRET_KEY: ${{ secrets.ARCHIVE_SECRET_KEY }}
+        run: python az/az_worker.py
