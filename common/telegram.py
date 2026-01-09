@@ -7,4 +7,7 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 bot = Bot(token=TELEGRAM_TOKEN)
 
 def send_message(msg):
-    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
+    try:
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
+    except Exception as e:
+        print(f"Telegram send error: {e}")
