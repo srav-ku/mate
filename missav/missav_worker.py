@@ -1,29 +1,68 @@
 import os
+import requests
 import subprocess
+import shutil
 import tempfile
-from common.sheets import read_pending_rows, update_row
+from bs4 import BeautifulSoup
+
+from common.sheets import (
+    read_pending_rows,
+    get_max_assigned_number,
+    update_row
+)
 from common.archive import upload_file
 
-TAB_NAME = "MissAV"
+TAB_NAME = "MISSAV"
 
-def download_hls(title, hls_url):
-    tmp_dir = tempfile.mkdtemp()
-    output_file = os.path.join(tmp_dir, f"{title}.mp4")
 
-    cmd = [
-        "ffmpeg",
-        "-loglevel", "error",
-        "-nostats",
-        "-i", hls_url,
-        "-c", "copy",
-        output_file
-    ]
+def missav_download_logic(title, link, number, identifier):
+    temp_dir = tempfile.mkdtemp(prefix="missav_")
+    headers = {"User-Agent": "Mozilla/5.0"}
 
-    subprocess.run(cmd, check=True)
-    return output_file, tmp_dir
+    try:
+        # Step 1: get page
+        r = requests.get(link, headers=headers, timeout=30)
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        video = soup.find("video")
+        if not video:
+            return False, "Video tag not found"
+
+        source = video.find("source")
+        if not source or not source.get("src"):
+            return False, "Video source not found"
+
+        video_url = source["src"]
+
+        # Step 2: download mp4
+        output = os.path.join(
+            temp_dir, f"{number:02d} - {title}.mp4"
+        )
+
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-loglevel", "error",
+                "-i", video_url,
+                "-c", "copy",
+                output
+            ],
+            check=True
+        )
+
+        # Step 3: upload
+        return upload_file(output, identifier)
+
+    except Exception as e:
+        return False, str(e)
+
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 def main():
     rows = read_pending_rows(TAB_NAME)
+    current_number = get_max_assigned_number(TAB_NAME)
 
     for r in rows:
         row_num = r["row"]
@@ -31,35 +70,30 @@ def main():
         link = r["Link"]
         identifier = r["Identifier"]
 
-        try:
-            video_path, tmp_dir = download_hls(title, link)
+        next_number = current_number + 1
 
-            success, msg = upload_file(video_path, identifier)
-            if not success:
-                raise Exception(msg)
+        success, msg = missav_download_logic(
+            title, link, next_number, identifier
+        )
 
-            # ✅ IMMEDIATE WRITE AFTER SUCCESS
+        if success:
             update_row(
                 TAB_NAME,
-                row=row_num,
-                status="DONE",
-                assigned_number="",
-                error_message=""
+                row_num,
+                "DONE",
+                next_number,
+                ""
             )
-
-        except Exception as e:
-            # ✅ IMMEDIATE WRITE AFTER FAILURE
+            current_number += 1
+        else:
             update_row(
                 TAB_NAME,
-                row=row_num,
-                status="FAILED",
-                assigned_number="",
-                error_message=str(e)
+                row_num,
+                "FAILED",
+                "",
+                msg
             )
 
-        finally:
-            if "tmp_dir" in locals():
-                subprocess.run(["rm", "-rf", tmp_dir])
 
 if __name__ == "__main__":
     main()
