@@ -1,0 +1,37 @@
+name: MomVids Worker
+
+on:
+  workflow_dispatch:
+
+jobs:
+  momvids:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install yt-dlp
+
+      - name: Restore Google credentials
+        run: |
+          echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT }}" > service_account.json
+
+      - name: Run MomVids worker
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: service_account.json
+        run: |
+          python momvids/mom_worker.py
