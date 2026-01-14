@@ -6,7 +6,7 @@ import shutil
 from common.sheets import read_pending_rows, update_row
 from common.archive import upload_file
 
-TAB_NAME = "MOMVIDS"
+TAB_NAME = "EPON"
 COOKIES_FILE = "momvids_cookies.txt"
 
 
@@ -23,13 +23,24 @@ def momvids_download_logic(title, link, identifier):
             "--referer", "https://www.momvids.com/",
             "--no-check-certificate",
             "--no-part",
+            "--no-warnings",
             "-o", output_path,
             link
         ]
 
-        subprocess.run(cmd, check=True)
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True
+        )
 
-        return upload_file(output_path, identifier)
+        return upload_file(output_path, identifier), ""
+
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.strip() or e.stdout.strip() or str(e)
+        return False, error_msg
 
     except Exception as e:
         return False, str(e)
