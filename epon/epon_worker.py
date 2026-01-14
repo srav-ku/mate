@@ -2,7 +2,7 @@ import os
 import subprocess
 import tempfile
 import shutil
-import re
+
 from common.sheets import (
     read_pending_rows,
     get_max_assigned_number,
@@ -11,177 +11,89 @@ from common.sheets import (
 from common.archive import upload_file
 
 TAB_NAME = "EPON"
+COOKIES_FILE = "momvids_cookies.txt"
 
-# Hardcoded cookies.txt content (you can change later)
-COOKIES_CONTENT = """# Netscape HTTP Cookie File
-# https://curl.haxx.se/rfc/cookie_spec.html
-# This is a generated file! Do not edit.
-.momvids.com	TRUE	/	TRUE	1768450998	kt_rt_sub	100001
-www.momvids.com	FALSE	/	FALSE	1783916600	kt_rt_fist	false
-www.momvids.com	FALSE	/	FALSE	1768969401	kt_tcookie	1
-.momvids.com	TRUE	/	TRUE	1768450998	kt_qparams	id%3D109053%26dir%3Dstepmom-feed-milk-pamela-rios%26utm_source%3DPBWeb%26utm_medium%3DPBWeb%26sub%3D100001
-.momvids.com	TRUE	/	TRUE	1768450998	kt_ips	37.203.37.93%2C89.111.28.75
-.momvids.com	TRUE	/	FALSE	0	PHPSESSID	f74354a02102865caf29fd77c1b952dc
-.momvids.com	TRUE	/	TRUE	1783916603	cf_clearance	4Or80HBSuFPA8eVSCV3bg_.GCiAAyMNKt7quiBBugY0-1768364603-1.2.1.1-oi10_PMNEk2GQA.9aspW.NY.9LLTz.fS0Sklx3cF6MSu.DAif9cotX_qut3ePrB9nrW7hZP0zU6B0R7SLobRzzDN16fQhlC9BB5AXtfMnkFyO.b5i.Vv.kvbBS8CEjR6.uwX6W2VdbfiPexTjR1zlZWtXf7WAM.04Jy0JllVa2Ox.v0.LwDGka1zpesWIU3V0._HykG4NLBuOWddZ1FTQPOigqUWNIDLuJyF08DwT7k"""
 
-# Write cookies to temp file once
-COOKIES_PATH = "/tmp/momvids_cookies.txt"
-with open(COOKIES_PATH, "w", encoding="utf-8") as f:
-    f.write(COOKIES_CONTENT)
+# ---------- DOWNLOADERS ----------
 
-def download_with_ytdlp_cookies_first(title, url, output_path):
-    """
-    NEW PRIORITY FALLBACK #1: yt-dlp with cookies + try video page URL first
-    """
-    video_page_url = url
-
-    # If it's a /get_file/... link, try to guess the video page URL
-    if "/get_file/" in url:
-        match = re.search(r'/(\d{5,6})/[^/]+\.mp4', url)
-        if match:
-            video_id = match.group(1)
-            # Create slug from title
-            slug = title.lower().replace(" ", "-").replace("'", "").replace(",", "").replace(":", "").replace("?", "")
-            video_page_url = f"https://www.momvids.com/videos/{video_id}/{slug}/"
-            print(f"   Trying guessed video page: {video_page_url}")
-
+def download_momvids(url, output_path):
     cmd = [
         "yt-dlp",
-        "--cookies", COOKIES_PATH,
+        "--cookies", COOKIES_FILE,
         "--impersonate", "chrome",
-        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "--referer", "https://www.momvids.com/",
         "--no-check-certificate",
-        "--force-generic-extractor",
         "--no-part",
-        "--no-warnings",
         "-o", output_path,
-        video_page_url
+        url
     ]
-
-    try:
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print(f"Success with yt-dlp + cookies (priority): {os.path.basename(output_path)}")
-        print("Output:", result.stdout.strip()[:300])
-        return True
-    except subprocess.CalledProcessError as e:
-        print("yt-dlp cookies priority failed:", e.stderr.strip()[:300])
-        return False
+    subprocess.run(cmd, check=True)
 
 
-def download_with_ytdlp(url, output_path):
-    """Old first attempt: yt-dlp with eporner referer"""
+def download_eporner_ytdlp(url, output_path):
     cmd = [
         "yt-dlp",
         "--no-part",
         "--no-warnings",
-        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "--user-agent", "Mozilla/5.0",
         "--referer", "https://www.eporner.com/",
         "-o", output_path,
         url
     ]
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    subprocess.run(cmd, check=True)
 
 
-def download_with_aria2_standard(url, output_dir, filename):
-    """Second attempt: standard aria2c"""
+def download_aria2(url, output_dir, filename):
     cmd = [
         "aria2c",
-        "-x", "16", "-s", "16",
+        "-x", "16",
+        "-s", "16",
         "--file-allocation=trunc",
         "--auto-file-renaming=false",
         "--allow-overwrite=true",
         "--dir", output_dir,
         "-o", filename,
-        "--header=User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "--header=User-Agent: Mozilla/5.0",
         "--header=Referer: https://www.eporner.com/",
-        "--header=Accept: */*",
         url
     ]
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    subprocess.run(cmd, check=True)
 
 
-def download_with_aria2_xtits_aggressive(url, output_dir, filename):
-    """Third attempt: aggressive aria2c with xtits.xxx referer"""
-    cmd = [
-        "aria2c",
-        "-x", "16", "-s", "16",
-        "--file-allocation=trunc",
-        "--summary-interval=2",
-        "--console-log-level=info",
-        "--show-console-readout=true",
-        "--auto-file-renaming=false",
-        "--allow-overwrite=true",
-        "--dir", output_dir,
-        "-o", filename,
-        "--header=User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "--header=Referer: https://www.xtits.xxx/",
-        "--header=Accept: */*",
-        "--header=Accept-Language: en-US,en;q=0.9",
-        "--header=Connection: keep-alive",
-        "--check-certificate=false",
-        "--remote-time=true",
-        url
-    ]
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
-
+# ---------- CORE LOGIC ----------
 
 def epon_download_logic(title, link, number, identifier):
     temp_dir = tempfile.mkdtemp(prefix="epon_")
     filename = f"{number:02d} - {title}.mp4"
     output_path = os.path.join(temp_dir, filename)
 
-    success = False
-    error_msg = ""
-
     try:
-        # NEW PRIORITY: Try yt-dlp with cookies + video page first
-        if download_with_ytdlp_cookies_first(title, link, output_path):
-            success = True
-        else:
-            error_msg = "yt-dlp cookies failed"
+        # 1️⃣ MomVids FIRST
+        try:
+            download_momvids(link, output_path)
+            return upload_file(output_path, identifier)
+        except Exception:
+            pass
 
-        # 1. Old yt-dlp (eporner style) - fallback if above failed
-        if not success:
-            try:
-                download_with_ytdlp(link, output_path)
-                success = True
-                print(f"Success with old yt-dlp (eporner): {filename}")
-            except subprocess.CalledProcessError as e:
-                error_msg += f" | yt-dlp eporner failed: {e.stderr.strip() or str(e)}"
-                print(error_msg)
+        # 2️⃣ EPON yt-dlp
+        try:
+            download_eporner_ytdlp(link, output_path)
+            return upload_file(output_path, identifier)
+        except Exception:
+            pass
 
-        # 2. Standard aria2c
-        if not success:
-            try:
-                download_with_aria2_standard(link, temp_dir, filename)
-                success = True
-                print(f"Success with standard aria2c: {filename}")
-            except subprocess.CalledProcessError as e:
-                error_msg += f" | standard aria2c failed: {e.stderr.strip() or str(e)}"
-                print(error_msg)
-
-        # 3. Aggressive aria2c (xtits)
-        if not success:
-            try:
-                download_with_aria2_xtits_aggressive(link, temp_dir, filename)
-                success = True
-                print(f"Success with xtits-aggressive aria2c: {filename}")
-            except subprocess.CalledProcessError as e:
-                error_msg += f" | xtits-aggressive aria2c failed: {e.stderr.strip() or str(e)}"
-                print(error_msg)
-
-        if success:
-            return upload_file(output_path, identifier), ""
-        else:
-            return False, error_msg
+        # 3️⃣ aria2 fallback
+        download_aria2(link, temp_dir, filename)
+        return upload_file(output_path, identifier)
 
     except Exception as e:
-        return False, f"Unexpected error: {str(e)}"
+        return False, str(e)
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+
+# ---------- MAIN ----------
 
 def main():
     rows = read_pending_rows(TAB_NAME)
@@ -196,31 +108,14 @@ def main():
         next_number = current_number + 1
 
         success, msg = epon_download_logic(
-            title,
-            link,
-            next_number,
-            identifier
+            title, link, next_number, identifier
         )
 
         if success:
-            update_row(
-                TAB_NAME,
-                row_num,
-                "DONE",
-                next_number,
-                ""
-            )
+            update_row(TAB_NAME, row_num, "DONE", next_number, "")
             current_number += 1
-            print(f"Row {row_num} marked DONE - number {next_number}")
         else:
-            update_row(
-                TAB_NAME,
-                row_num,
-                "FAILED",
-                "",
-                msg
-            )
-            print(f"Row {row_num} FAILED: {msg}")
+            update_row(TAB_NAME, row_num, "FAILED", "", msg)
 
 
 if __name__ == "__main__":
