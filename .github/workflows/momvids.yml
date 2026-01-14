@@ -34,4 +34,4 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: service_account.json
         run: |
-          PYTHONPATH=. python momvids/mom_worker.py
+          python -m momvids.mom_worker
